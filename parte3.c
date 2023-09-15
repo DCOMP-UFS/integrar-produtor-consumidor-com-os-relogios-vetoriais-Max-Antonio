@@ -81,15 +81,71 @@ Clock* Receive(){
 }
 
 
+void insereFilaSaida(void* arg, int origem, int destino) {
+    Args *args = arg;
+    pthread_mutex_lock(&args->mutexSaida); //o lock é feito aqui por causa do clock
+        
+    while(args->filaSaidaCont == SIZE) {
+        pthread_cond_wait(&(args->condFullEntrada), &(args->mutexEntrada));
+    }
+        
+    Mensagem *mensagem = (Mensagem*)malloc(sizeof(Mensagem));
+    mensagem->clock = args->clock;
+    mensagem->origem = origem;
+    mensagem->destino = destino;
+        
+    args->filaSaida[args->filaSaidaCont] = *mensagem;
+        
+    pthread_mutex_unlock(&args->mutexSaida);
+    pthread_cond_signal(&(args->condEmptySaida));
+    free(mensagem);
+}
 
+void retiraFilaEntrada(void* arg) {
+    Args *args = arg;
+    pthread_mutex_lock(&args->mutexEntrada);
+    
+    while(args->filaEntradaCont == 0) {
+        pthread_cond_wait(&(args->condEmptySaida), &(args->mutexEntrada));
+    }
+    
+    Clock clock = args->filaEntrada[0];
+    for (int i = 0; i < (args->filaEntradaCont) -1; i++) {
+        args->filaEntrada[i] = args->filaEntrada[i+1]
+    }
+    
+    for (int i = 0; i < 3; i++) {
+        if(clock->p[i] > args->clock->p[i]) {
+            args->clock->p[i] = clock->p[i];
+        }
+    }
+    
+    pthread_mutex_unlock(&args->mutexEntrada);
+    pthread_cond_signal(&(args->condFullEntrada));
+}
 
 void* threadRelogio(void* arg) {
     Args *args = arg;
     if (args->processo = 0) {
         Event(0, &args->clock);
-    
+        printClock(&args->clock, 0);
+        
+        insereFilaSaida((void*) args, 0, 1);
+        printClock(&args->clock, 0);
+        
+        retiraFilaEntrada((void*) args);
+        printClock(&args->clock, 0);
+        
+        insereFilaSaida((void*) args, 0, 2);
+        printClock(&args->clock, 0);
+        
+        retiraFilaEntrada((void*) args);
+        printClock(&args->clock, 0);
+        
+        insereFilaSaida((void*) args, 0, )
         
     }
+    
     if (args->processo = 1) {
         
     }
@@ -109,9 +165,11 @@ void* threadSaida(void* arg) {
             pthread_cond_wait(&(args->condEmptySaida), &(args->mutexSaida));
         }
         
+        Mensagem *mensagem = (Mensagem*)malloc(sizeof(Mensagem));
+        mensagem = &args->filaSaida[0];
         
-        Mensagem mensagem = args->filaSaida[0];
-        //print
+        Send(mensagem->origem, mensagem->destino, &mensagem->clock);
+        
         for(int i = 0; i < (args->filaSaidaCont) -1; i++) {
             args->filaSaida[i] = args->filaSaida[i+1];
         }
