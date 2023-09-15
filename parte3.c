@@ -34,8 +34,8 @@ typedef struct args {
     pthread_cond_t condEmptySaida;
     pthread_mutex_t mutexEntrada;
     pthread_mutex_t mutexSaida;
-    Clock filaEntrada[SIZE];
-    Mensagem filaSaida[SIZE];
+    Clock *filaEntrada;
+    Mensagem *filaSaida;
 } Args;
 
 
@@ -50,7 +50,7 @@ void Event(int pid, Clock *clock){
 }
 
 
-void Send(int destino, Clock *clock){
+void Send(int origem, int destino, Clock *clock){
    clock->p[origem]++;  //atualiza o clock
    int * mensagemClock;
    mensagemClock = calloc (3, sizeof(int));
@@ -86,6 +86,8 @@ Clock* Receive(){
 void* threadRelogio(void* arg) {
     Args *args = arg;
     if (args->processo = 0) {
+        Event(0, &args->clock);
+    
         
     }
     if (args->processo = 1) {
@@ -107,6 +109,7 @@ void* threadSaida(void* arg) {
             pthread_cond_wait(&(args->condEmptySaida), &(args->mutexSaida));
         }
         
+        
         Mensagem mensagem = args->filaSaida[0];
         //print
         for(int i = 0; i < (args->filaSaidaCont) -1; i++) {
@@ -123,17 +126,14 @@ void* threadSaida(void* arg) {
 void* threadEntrada(void* arg) {
     Args *args = arg;
     while(1) {
-        Clock clock = *Receive();
+        Clock *clock = Receive();
         pthread_mutex_lock(&(args->mutexEntrada));
         
         while(args->filaEntradaCont == SIZE) {
             pthread_cond_wait(&(args->condFullEntrada), &(args->mutexEntrada));
         }
         
-        Mensagem *mensagem = (Mensagem*)malloc(sizeof(Mensagem));
-        mensagem->clock = clock;
-        
-        args->filaEntrada[args->filaEntradaCont] = mensagem;
+        args->filaEntrada[args->filaEntradaCont] = *clock;
         (args->filaEntradaCont)++;
         
         pthread_mutex_unlock(&(args->mutexEntrada));
@@ -162,14 +162,14 @@ void processo(int p) {
     int filaEntradaCont = 0;
     int filaSaidaCont = 0;
     
-    Mensagem filaEntrada[SIZE]; //filas do processo
+    Clock filaEntrada[SIZE]; //filas do processo
     Mensagem filaSaida[SIZE];
     
     //argumentos para a threadRelogio
     Args *argsRelogio = (Args*)malloc(sizeof(Args));
     argsRelogio->clock;
     argsRelogio->processo = p;
-    argsRelogio-> filaEntradaCont; = filaEntradaCont;
+    argsRelogio-> filaEntradaCont = filaEntradaCont;
     argsRelogio-> filaSaidaCont = filaSaidaCont;
     argsRelogio->condEmptyEntrada = condEmptyEntrada;
     argsRelogio->condFullEntrada = condFullEntrada;
@@ -181,9 +181,9 @@ void processo(int p) {
     argsRelogio->filaSaida = filaSaida;
     
     pthread_cond_init(&(argsRelogio->condFullEntrada), NULL);
-    pthread_cond_init(&(argsRelogio->EmptyEntrada), NULL);
+    pthread_cond_init(&(argsRelogio->condEmptyEntrada), NULL);
     pthread_cond_init(&(argsRelogio->condFullSaida), NULL);
-    pthread_cond_init(&(argsRelogio->EmptySaida), NULL);
+    pthread_cond_init(&(argsRelogio->condEmptySaida), NULL);
     pthread_mutex_init(&(argsRelogio->mutexEntrada), NULL);
     pthread_mutex_init(&(argsRelogio->mutexSaida), NULL);
     
@@ -202,26 +202,21 @@ void processo(int p) {
     if (pthread_create(&tSaida, NULL, &threadSaida, (void*) argsRelogio) != 0) { //cria thread de saida
         perror("Failed to create the thread");
     }  
-
-    
-    
     
     //join das threads 
-    if (pthread_join(threadRelogio, NULL) != 0) { //join thread Relogio
+    if (pthread_join(tRelogio, NULL) != 0) { //join thread Relogio
         perror("Failed to join the thread");
     }  
-    
-    for (i = 0; i < THREAD_NUM*2; i++){  
-        if (pthread_join(threadsEntrada[i], NULL) != 0) { //join threads entrada
-            perror("Failed to join the thread");
-        }  
-    }
-    
-    for (i = 0; i < THREAD_NUM*2; i++){  
-        if (pthread_join(threadsSaida[i], NULL) != 0) { //join threads saida
-            perror("Failed to join the thread");
-        }  
-    }
+
+    if (pthread_join(tEntrada, NULL) != 0) { //join threads entrada
+        perror("Failed to join the thread");
+    }  
+
+
+    if (pthread_join(tSaida, NULL) != 0) { //join threads saida
+        perror("Failed to join the thread");
+    }  
+
     
 }
 
