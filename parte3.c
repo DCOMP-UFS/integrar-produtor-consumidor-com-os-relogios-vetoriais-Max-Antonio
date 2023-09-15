@@ -8,10 +8,22 @@ typedef struct Clock {
 typedef struct args {
     int processo;
     Clock clock;
-    pthread_cond_t condFull;
-    pthread_cond_t condEmpty;
-    pthread_mutex_t mutex;
+    pthread_cond_t condFullEntrada;
+    pthread_cond_t condEmptyEntrada;
+    pthread_cond_t condFullSaida;
+    pthread_cond_t condEmptySaida;
+    pthread_mutex_t mutexEntrada;
+    pthread_mutex_t mutexSaida;
 } Args;
+
+Clock filaEntrada0[SIZE]; //filas do processo 0
+Clock filaSaida0[SIZE];
+
+Clock filaEntrada1[SIZE]; //filas do processo 1
+Clock filaSaida1[SIZE];
+    
+Clock filaEntrada2[SIZE]; //filas do processo 2
+Clock filaSaida2[SIZE];
 
 void printClock(Clock *clock, int processo) {
    printf("Process: %d, Clock: (%d, %d, %d)\n", processo, clock->p[0], clock->p[1], clock->p[2]);
@@ -85,9 +97,6 @@ void processo(int p) {
     pthread_t tEntrada;
     pthread_t tRelogio;
     
-    Clock filaEntrada0[SIZE]; //filas do processo 
-    Clock filaSaida0[SIZE];
-    
     pthread_mutex_t mutexEntrada; //mutex do processo 0
     pthread_mutex_t mutexSaida;
     
@@ -98,11 +107,12 @@ void processo(int p) {
     pthread_cond_t condEmptySaida;
     
     //argumentos para a threadRelogio
+    Args *argsRelogio = (Args*)malloc(sizeof(Args));
+    argsRelogio
     
     //argumentos para a threadEntrada
     Args *argsEntrada = (Args*)malloc(sizeof(Args));
     argsEntrada->processo = p;
-    argsEntrada->clock = clock;
     argsEntrada->condFull = condFullEntrada;
     argsEntrada->condEmpty = condEmptyEntrada;
     argsEntrada->mutexEntrada = mutexEntrada;
@@ -113,7 +123,6 @@ void processo(int p) {
     //argumentos para a threadSaida
     Args *argsSaida = (Args*)malloc(sizeof(Args));
     argsSaida->processo = p;
-    argsSaida->clock = clock;
     argsSaida->condFull = condFullSaida;
     argsSaida->condEmpty = condEmptySaida;
     argsSaida->mutexEntrada = mutexSaida;
