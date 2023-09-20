@@ -266,7 +266,7 @@ void processo(int p) {
 
     // argumentos para a thread de entrada
     Args_entrada argsEntrada;
-    argsEntrada.processo = p;
+    argsEntrada.processo = p; 
     argsEntrada.filaEntradaCont = 0;
     argsEntrada.condFullEntrada = condFullEntrada;
     argsEntrada.condEmptyEntrada = condEmptyEntrada;
@@ -282,6 +282,7 @@ void processo(int p) {
 
     // argumentos para a thread de relogio
     Args_relogio *argsRelogio = (Args_relogio*)malloc(sizeof(Args_relogio));
+    argsRelogio->processo = p;
     argsRelogio->clock = clock;
     argsRelogio->argsEntrada = argsEntrada;
     argsRelogio->argsSaida = argsSaida;
