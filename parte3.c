@@ -79,6 +79,11 @@ Clock* Receive(){
    
    MPI_Recv(valoresClock, 3,  MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
    
+    for (int i = 0; i < 3; i++) {
+        clock->p[i] = valoresClock[i];
+    }
+
+
    free(valoresClock);
    return clock;
 }
@@ -86,59 +91,59 @@ Clock* Receive(){
 
 void insereFilaSaida(void* arg, int origem, int destino) {
     Args_relogio *argsRelogio = arg;
-    Args_entrada *argsEntrada = argsRelogio.argsEntrada;
-    Args_saida *argsSaida = argsRelogio.argsSaida;
+    Args_entrada argsEntrada = argsRelogio->argsEntrada;
+    Args_saida argsSaida = argsRelogio->argsSaida;
 
-    pthread_mutex_lock(&argsSaida->mutexSaida); //o lock é feito aqui por causa do clock
+    pthread_mutex_lock(&argsSaida.mutexSaida); //o lock é feito aqui por causa do clock
         
-    while(argsSaida->filaSaidaCont == SIZE) { //enquanto a fila estiver cheia espere
-        pthread_cond_wait(&(argsSaida->condFullSaida), &(argsSaida->mutexSaida));
+    while(argsSaida.filaSaidaCont == SIZE) { //enquanto a fila estiver cheia espere
+        pthread_cond_wait(&(argsSaida.condFullSaida), &(argsSaida.mutexSaida));
     }
     
     //cria a mensagem
     Mensagem *mensagem = (Mensagem*)malloc(sizeof(Mensagem));
-    mensagem->clock = args->clock;
+    mensagem->clock = argsRelogio->clock;
     mensagem->origem = origem;
     mensagem->destino = destino;
     
     //insere na fila
-    args->filaSaida[args->filaSaidaCont] = *mensagem;
+    argsSaida.filaSaida[argsSaida.filaSaidaCont] = *mensagem;
         
-    pthread_mutex_unlock(&args->mutexSaida); // faz o unlock da fila
-    pthread_cond_signal(&(args->condEmptySaida)); //fila não está mais vazia
+    pthread_mutex_unlock(&argsSaida.mutexSaida); // faz o unlock da fila
+    pthread_cond_signal(&(argsSaida.condEmptySaida)); //fila não está mais vazia
     free(mensagem);
 }
 
 void retiraFilaEntrada(void* arg) {
     Args_relogio *argsRelogio = arg;
-    Args_entrada *argsEntrada = argsRelogio.argsEntrada;
-    Args_saida *argsSaida = argsRelogio.argsSaida;
+    Args_entrada argsEntrada = argsRelogio->argsEntrada;
+    Args_saida argsSaida = argsRelogio->argsSaida;
 
-    pthread_mutex_lock(&argsEntrada->mutexEntrada); //faz o lock na fila de entrada
+    pthread_mutex_lock(&argsEntrada.mutexEntrada); //faz o lock na fila de entrada
     
-    while(argsEntrada->filaEntradaCont == 0) { //enquanto estiver vazia espere
-        pthread_cond_wait(&(argsEntrada->condEmptyEntrada), &(argsEntrada->mutexEntrada));
+    while(argsEntrada.filaEntradaCont == 0) { //enquanto estiver vazia espere
+        pthread_cond_wait(&(argsEntrada.condEmptyEntrada), &(argsEntrada.mutexEntrada));
     }
     
     //tira do começo da fila
-    Clock clock = argsEntrada->filaEntrada[0];
-    for (int i = 0; i < (argsEntrada->filaEntradaCont) -1; i++) {
-        argsEntrada->filaEntrada[i] = argsEntrada->filaEntrada[i+1]
+    Clock clock = argsEntrada.filaEntrada[0];
+    for (int i = 0; i < (argsEntrada.filaEntradaCont) -1; i++) {
+        argsEntrada.filaEntrada[i] = argsEntrada.filaEntrada[i+1];
     }
     
     for (int i = 0; i < 3; i++) { //atualiza o clock da thread relogio
-        if(clock->p[i] > argsRelogio->clock->p[i]) {
-            argsRelogio->clock->p[i] = clock->p[i];
+        if(clock.p[i] > argsRelogio->clock.p[i]) {
+            argsRelogio->clock.p[i] = clock.p[i];
         }
     }
     
-    pthread_mutex_unlock(&args->mutexEntrada); //faz o unlock na fila de entrada
-    pthread_cond_signal(&(args->condFullEntrada)); //fila não está mais cheia
+    pthread_mutex_unlock(&argsEntrada.mutexEntrada); //faz o unlock na fila de entrada
+    pthread_cond_signal(&(argsEntrada.condFullEntrada)); //fila não está mais cheia
 }
 
 void* threadRelogio(void* arg) {
     Args_relogio *args = arg;
-    if (args->processo = 0) {
+    if (args->processo == 0) {
         Event(0, &args->clock);
         printClock(&args->clock, 0);
         
@@ -154,10 +159,14 @@ void* threadRelogio(void* arg) {
         retiraFilaEntrada((void*) args);
         printClock(&args->clock, 0);
         
-        insereFilaSaida((void*) args, 0, )
+        insereFilaSaida((void*) args, 0, 1);
+        printClock(&args->clock, 0);
+
+        Event(0, &args->clock);
+        printClock(&args->clock, 0);
     }
     
-    if (args->processo = 1) {
+    if (args->processo == 1) {
         insereFilaSaida((void*) args, 1, 0);
         printClock(&args->clock, 1);
 
@@ -168,7 +177,7 @@ void* threadRelogio(void* arg) {
         printClock(&args->clock, 1);
     }
 
-    if (args->processo = 2) {
+    if (args->processo == 2) {
         Event(2, &args->clock);
         printClock(&args->clock, 2);
 
@@ -190,8 +199,7 @@ void* threadSaida(void* arg) {
             pthread_cond_wait(&(args->condEmptySaida), &(args->mutexSaida));
         }
         
-        Mensagem *mensagem = (Mensagem*)malloc(sizeof(Mensagem));
-        mensagem = &args->filaSaida[0];
+        Mensagem *mensagem = &args->filaSaida[0];
         
         Send(mensagem->origem, mensagem->destino, &mensagem->clock);
         
@@ -257,36 +265,36 @@ void processo(int p) {
     pthread_mutex_init(&mutexSaida, NULL);
 
     // argumentos para a thread de entrada
-    Args_entrada ArgsEntrada = (Args_entrada*)malloc(sizeof(Args_entrada));
-    ArgsEntrada.processo = p;
-    ArgsEntrada.filaEntradaCont = 0;
-    ArgsEntrada.condFullEntrada = condFullEntrada;
-    ArgsEntrada.condEmptyEntrada = condEmptyEntrada;
-    ArgsEntrada.mutexEntrada = mutexEntrada;
+    Args_entrada argsEntrada;
+    argsEntrada.processo = p;
+    argsEntrada.filaEntradaCont = 0;
+    argsEntrada.condFullEntrada = condFullEntrada;
+    argsEntrada.condEmptyEntrada = condEmptyEntrada;
+    argsEntrada.mutexEntrada = mutexEntrada;
 
     // argumentos para a thread de saida
-    Args_saida ArgsSaida = (Args_saida*)malloc(sizeof(Args_saida));
-    ArgsSaida.processo = p;
-    ArgsSaida.filaSaidaCont = 0;
-    ArgsSaida.condFullSaida = condFullSaida;
-    ArgsSaida.condEmptySaida = condEmptySaida;
-    ArgsSaida.mutexSaida = mutexSaida;
+    Args_saida argsSaida;
+    argsSaida.processo = p;
+    argsSaida.filaSaidaCont = 0;
+    argsSaida.condFullSaida = condFullSaida;
+    argsSaida.condEmptySaida = condEmptySaida;
+    argsSaida.mutexSaida = mutexSaida;
 
     // argumentos para a thread de relogio
-    Args_relogio ArgsRelogio = (Args_relogio*)malloc(sizeof(Args_relogio));
-    ArgsRelogio.clock = clock;
-    ArgsRelogio.argsEntrada = ArgsEntrada;
-    ArgsRelogio.argsSaida = ArgsSaida;
+    Args_relogio *argsRelogio = (Args_relogio*)malloc(sizeof(Args_relogio));
+    argsRelogio->clock = clock;
+    argsRelogio->argsEntrada = argsEntrada;
+    argsRelogio->argsSaida = argsSaida;
     
 
     //cria threads
-    if (pthread_create(&tRelogio, NULL, &threadRelogio, (void*) ArgsRelogio) != 0) { //cria thread Relogio
+    if (pthread_create(&tRelogio, NULL, &threadRelogio, (void*) argsRelogio) != 0) { //cria thread Relogio
         perror("Failed to create the thread");
     }     
-    if (pthread_create(&tEntrada, NULL, &threadEntrada, (void*) ArgsEntrada) != 0) { //cria thread de entrada
+    if (pthread_create(&tEntrada, NULL, &threadEntrada, (void*) &argsEntrada) != 0) { //cria thread de entrada
         perror("Failed to create the thread");
     }  
-    if (pthread_create(&tSaida, NULL, &threadSaida, (void*) ArgsSaida) != 0) { //cria thread de saida
+    if (pthread_create(&tSaida, NULL, &threadSaida, (void*) &argsSaida) != 0) { //cria thread de saida
         perror("Failed to create the thread");
     }  
     
@@ -301,9 +309,7 @@ void processo(int p) {
         perror("Failed to join the thread");
     }  
 
-    free(ArgsEntrada);
-    free(ArgsSaida);
-    free(ArgsRelogio);
+    free(argsRelogio);
 }
 
 
