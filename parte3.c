@@ -80,12 +80,13 @@ void Event(int pid, Clock *clock){
 
 
 void Send(int origem, int destino, Clock *clock){
-    clock->p[origem]++;
-    printClock(clock, origem);
-    int *valoresClock;
+    clock->p[origem]++; //atualiza o clock
+    printClock(clock, origem); //print do clock atualizado
+    
+    int *valoresClock; //valores para enviar no MPI_Send
     valoresClock = calloc(3, sizeof(int));
    
-    for (int i = 0; i < 3; i++) {
+    for (int i = 0; i < 3; i++) { //coloca o clock atual nos valores a enviar
         valoresClock[i] = clock->p[i];
     }
    
@@ -98,7 +99,7 @@ void Send(int origem, int destino, Clock *clock){
 
 
 Clock* Receive(){
-   int *valoresClock;
+   int *valoresClock; //valores pra receber o clock
    valoresClock = calloc (3, sizeof(int));
    Clock *clock = (Clock*)malloc(sizeof(Clock));
    
@@ -106,7 +107,7 @@ Clock* Receive(){
    
    //printf("recebendo...\n");
   
-   for (int i = 0; i < 3; i++) {
+   for (int i = 0; i < 3; i++) {//coloca os valores recebidos em um clock
         clock->p[i] = valoresClock[i];
    }
 
@@ -117,9 +118,9 @@ Clock* Receive(){
 
 
 void insereFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Mensagem* fila, Clock* clockGlobal, int origem, int destino) {
-        pthread_mutex_lock(mutex);
+        pthread_mutex_lock(mutex);//faz o lock da fila de saída
         
-        while(*filaCont == SIZE) {
+        while(*filaCont == SIZE) { //enquanto estiver cheia espere
             pthread_cond_wait(condFull, mutex);
         }
         
@@ -132,8 +133,8 @@ void insereFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_
         fila[*filaCont] = *mensagem;
         (*filaCont)++;
         
-        pthread_mutex_unlock(mutex);
-        pthread_cond_signal(condEmpty);
+        pthread_mutex_unlock(mutex); //faz o unlock da fila de saída
+        pthread_cond_signal(condEmpty); //fila não está mais vazia
 }
 
 void retiraFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Mensagem* fila, Clock* clockGlobal) {
@@ -157,18 +158,20 @@ void retiraFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_
 }
 
 void insereFilaEntrada(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Clock* fila, Clock* clockGlobal) {
-        Clock *clock = Receive();
+        Clock *clock = Receive(); //recebe algum clock
         
-        pthread_mutex_lock(mutex);
+        pthread_mutex_lock(mutex); //faz o lock da fila de entrada
         
-        while(*filaCont == SIZE) {
+        while(*filaCont == SIZE) { //enquanto estiver cheia espere
             pthread_cond_wait(condFull, mutex);
         }
+        
+        //insere clock no começo da fila
         fila[*filaCont] = *clock;
         (*filaCont)++;
         
-        pthread_mutex_unlock(mutex);
-        pthread_cond_signal(condEmpty);
+        pthread_mutex_unlock(mutex); //faz o unlock da fila de entrada
+        pthread_cond_signal(condEmpty); //fila não está mais vazia
 }
 
 void retiraFilaEntrada(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Clock* fila, Clock* clockGlobal, int processo) {
@@ -185,7 +188,7 @@ void retiraFilaEntrada(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthrea
     }
     (*filaCont)--;
     
-    clockGlobal->p[processo]++;
+    clockGlobal->p[processo]++; //atualiza o clock
     
     for (int i = 0; i < 3; i++) { //atualiza o clock da thread relogio
         if(clock.p[i] > clockGlobal->p[i]) {
