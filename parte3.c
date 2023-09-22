@@ -89,9 +89,6 @@ void Send(int origem, int destino, Clock *clock){
    for (int i = 0; i < 3; i++) {
         valoresClock[i] = clock->p[i];
    }
-   
-   printClock(clock, origem);
-   
    //printf("Enviando o clock {%d, %d, %d} do processo %d para o processo %d\n", clock->p[0], clock->p[2], clock->p[2], origem, destino);
 
    MPI_Send(valoresClock, 3, MPI_INT, destino, origem, MPI_COMM_WORLD);
@@ -157,7 +154,8 @@ void retiraFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_
     (*filaCont)--;
     
     clockGlobal->p[processo]++;
-    
+
+    printClock(clock, processo); //printa o clock atualizado
     Send(mensagem.origem, mensagem.destino, &(mensagem.clock));
     
     pthread_mutex_unlock(mutex); //faz o unlock na fila de entrada
