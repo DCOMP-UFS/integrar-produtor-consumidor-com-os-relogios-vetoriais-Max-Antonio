@@ -83,7 +83,6 @@ void Event(int pid, Clock *clock){
 
 
 void Send(int origem, int destino, Clock *clock){
-   clock->p[origem]++;  //atualiza o clock
    int *valoresClock;
    valoresClock = calloc(3, sizeof(int));
    
@@ -143,7 +142,7 @@ void insereFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_
         pthread_cond_signal(condEmpty);
 }
 
-void retiraFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Mensagem* fila) {
+void retiraFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Mensagem* fila, Clock* clockGlobal, int processo) {
     pthread_mutex_lock(mutex); //faz o lock na fila de entrada
     
     while(*filaCont == 0) { //enquanto estiver vazia espere
@@ -156,6 +155,8 @@ void retiraFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_
         fila[i] = fila[i+1];
     }
     (*filaCont)--;
+    
+    clockGlobal->p[processo]++;
     
     Send(mensagem.origem, mensagem.destino, &(mensagem.clock));
     
@@ -259,13 +260,13 @@ void* threadSaida(void* arg) {
     int p = (int) arg;
     while(1) {
         if (p == 0) {
-            retiraFilaSaida(&mutexSaida0, &condEmptySaida0, &condFullSaida0, &filaSaidaCont0, filaSaida0);
+            retiraFilaSaida(&mutexSaida0, &condEmptySaida0, &condFullSaida0, &filaSaidaCont0, filaSaida0, &clock0, 0);
         }
         if (p == 1) {
-            retiraFilaSaida(&mutexSaida1, &condEmptySaida1, &condFullSaida1, &filaSaidaCont1, filaSaida1);
+            retiraFilaSaida(&mutexSaida1, &condEmptySaida1, &condFullSaida1, &filaSaidaCont1, filaSaida1, &clock1, 1);
         }
         if (p == 2) {
-            retiraFilaSaida(&mutexSaida2, &condEmptySaida2, &condFullSaida2, &filaSaidaCont2, filaSaida2);
+            retiraFilaSaida(&mutexSaida2, &condEmptySaida2, &condFullSaida2, &filaSaidaCont2, filaSaida2, &clock2, 2);
         }
     }
     return NULL;
