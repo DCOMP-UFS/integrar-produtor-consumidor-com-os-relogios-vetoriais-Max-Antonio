@@ -9,6 +9,15 @@
 // * Compilação: mpicc -o parte3 parte3.c  -lpthread -lrt
 // * Execução:   mpiexec -n 3 ./parte3 
 
+/*
+
+send e recieve é na thread relógio(inserir na fila de saida)
+mudar nomes
+atualiz
+
+
+*/
+
 #define SIZE 10
 
 typedef struct Clock { 
@@ -16,6 +25,7 @@ typedef struct Clock {
 } Clock;
 
 typedef struct mensagem { 
+    Clock clock;
     int destino;
     int origem;
 } Mensagem;
@@ -78,54 +88,19 @@ void Event(int pid, Clock *clock){
    clock->p[pid]++;   
 }
 
-
-void Send(int origem, int destino, Clock *clock){
-    clock->p[origem]++; //atualiza o clock
-    printClock(clock, origem); //print do clock atualizado
-    
-    int *valoresClock; //valores para enviar no MPI_Send
-    valoresClock = calloc(3, sizeof(int));
-   
-    for (int i = 0; i < 3; i++) { //coloca o clock atual nos valores a enviar
-        valoresClock[i] = clock->p[i];
-    }
-   
-    //printf("Enviando o clock {%d, %d, %d} do processo %d para o processo %d\n", clock->p[0], clock->p[1], clock->p[2], origem, destino);
-
-    MPI_Send(valoresClock, 3, MPI_INT, destino, origem, MPI_COMM_WORLD);
-   
-    free(valoresClock);
-}
-
-
-Clock* Receive(){
-   int *valoresClock; //valores pra receber o clock
-   valoresClock = calloc (3, sizeof(int));
-   Clock *clock = (Clock*)malloc(sizeof(Clock));
-   
-   MPI_Recv(valoresClock, 3,  MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
-   
-   //printf("recebendo...\n");
-  
-   for (int i = 0; i < 3; i++) {//coloca os valores recebidos em um clock
-        clock->p[i] = valoresClock[i];
-   }
-
-   free(valoresClock);
-   return clock;
-}
-
-
-
-void insereFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Mensagem* fila, Clock* clockGlobal, int origem, int destino) {
+//insere mensagem com 0 clock, destino e origem na fila de saida
+void Send(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Mensagem* fila, Clock* clockGlobal, int origem, int destino) {
         pthread_mutex_lock(mutex);//faz o lock da fila de saída
-        
+        clockGlobal->p[origem]++;
+        printClock(clockGlobal, origem);
+
         while(*filaCont == SIZE) { //enquanto estiver cheia espere
             pthread_cond_wait(condFull, mutex);
         }
         
         //cria a mensagem
         Mensagem *mensagem = (Mensagem*)malloc(sizeof(Mensagem));
+        mensagem->clock = *clockGlobal;
         mensagem->origem = origem;
         mensagem->destino = destino;
         
@@ -137,7 +112,7 @@ void insereFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_
         pthread_cond_signal(condEmpty); //fila não está mais vazia
 }
 
-void retiraFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Mensagem* fila, Clock* clockGlobal) {
+void saidaSend(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Mensagem* fila, Clock* clockGlobal) {
     pthread_mutex_lock(mutex); //faz o lock na fila de entrada
     
     while(*filaCont == 0) { //enquanto estiver vazia espere
@@ -151,14 +126,32 @@ void retiraFilaSaida(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_
     }
     (*filaCont)--;
     
-    Send(mensagem.origem, mensagem.destino, clockGlobal);
+    int *valoresClock; //valores para enviar no MPI_Send
+    valoresClock = calloc(3, sizeof(int));
+   
+    for (int i = 0; i < 3; i++) { //coloca o clock atual nos valores a enviar
+        valoresClock[i] = mensagem.clock.p[i];
+    }   
+    //printf("Enviando o clock {%d, %d, %d} do processo %d para o processo %d\n", clock->p[0], clock->p[1], clock->p[2], origem, destino);
+
+    MPI_Send(valoresClock, 3, MPI_INT, mensagem.destino, mensagem.origem, MPI_COMM_WORLD);
+   
+    free(valoresClock);
     
     pthread_mutex_unlock(mutex); //faz o unlock na fila de entrada
     pthread_cond_signal(condFull); //fila não está mais cheia
 }
 
-void insereFilaEntrada(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Clock* fila, Clock* clockGlobal) {
-        Clock *clock = Receive(); //recebe algum clock
+void entradaReceive(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Clock* fila, Clock* clockGlobal) {
+        int *valoresClock; //valores pra receber o clock
+        valoresClock = calloc (3, sizeof(int));
+        Clock *clock = (Clock*)malloc(sizeof(Clock));
+        MPI_Recv(valoresClock, 3,  MPI_INT, MPI_ANY_SOURCE, MPI_ANY_TAG, MPI_COMM_WORLD, MPI_STATUS_IGNORE);
+        
+        for (int i = 0; i < 3; i++) {//coloca os valores recebidos em um clock
+                clock->p[i] = valoresClock[i];
+        }
+        free(valoresClock);
         
         pthread_mutex_lock(mutex); //faz o lock da fila de entrada
         
@@ -174,8 +167,10 @@ void insereFilaEntrada(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthrea
         pthread_cond_signal(condEmpty); //fila não está mais vazia
 }
 
-void retiraFilaEntrada(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Clock* fila, Clock* clockGlobal, int processo) {
+//retira clock da fila de entrada
+void Receive(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthread_cond_t* condFull, int* filaCont, Clock* fila, Clock* clockGlobal, int processo) {
     pthread_mutex_lock(mutex); //faz o lock na fila de entrada
+    clockGlobal->p[processo]++;
     
     while(*filaCont == 0) { //enquanto estiver vazia espere
         pthread_cond_wait(condEmpty, mutex);
@@ -188,14 +183,14 @@ void retiraFilaEntrada(pthread_mutex_t* mutex, pthread_cond_t* condEmpty, pthrea
     }
     (*filaCont)--;
     
-    clockGlobal->p[processo]++; //atualiza o clock
+
     
     for (int i = 0; i < 3; i++) { //atualiza o clock da thread relogio
         if(clock.p[i] > clockGlobal->p[i]) {
             clockGlobal->p[i] = clock.p[i];
         }
     }
-    
+
     printClock(clockGlobal, processo); //printa o clock atualizado
     
     pthread_mutex_unlock(mutex); //faz o unlock na fila de entrada
@@ -208,19 +203,19 @@ void* threadRelogio(void* arg) {
         Event(0, &clock0);
         printClock(&clock0, 0);
         
-        insereFilaSaida(&mutexSaida0, &condEmptySaida0, &condFullSaida0, &filaSaidaCont0, filaSaida0, &clock0, 0, 1); //envia do processo 0 ao processo 1
+        Send(&mutexSaida0, &condEmptySaida0, &condFullSaida0, &filaSaidaCont0, filaSaida0, &clock0, 0, 1); //envia do processo 0 ao processo 1
         //printClock(&clock0, 0);
         
-        retiraFilaEntrada(&mutexEntrada0, &condEmptyEntrada0, &condFullEntrada0, &filaEntradaCont0, filaEntrada0, &clock0, 0); //recebe
+        Receive(&mutexEntrada0, &condEmptyEntrada0, &condFullEntrada0, &filaEntradaCont0, filaEntrada0, &clock0, 0); //recebe
         //printClock(&clock0, 0);
         
-        insereFilaSaida(&mutexSaida0, &condEmptySaida0, &condFullSaida0, &filaSaidaCont0, filaSaida0, &clock0, 0, 2); //envia do processo 0 ao processo 2
+        Send(&mutexSaida0, &condEmptySaida0, &condFullSaida0, &filaSaidaCont0, filaSaida0, &clock0, 0, 2); //envia do processo 0 ao processo 2
        // printClock(&clock0, 0);
         
-        retiraFilaEntrada(&mutexEntrada0, &condEmptyEntrada0, &condFullEntrada0, &filaEntradaCont0, filaEntrada0, &clock0, 0); //recebe
+        Receive(&mutexEntrada0, &condEmptyEntrada0, &condFullEntrada0, &filaEntradaCont0, filaEntrada0, &clock0, 0); //recebe
         //printClock(&clock0, 0);
         
-        insereFilaSaida(&mutexSaida0, &condEmptySaida0, &condFullSaida0, &filaSaidaCont0, filaSaida0, &clock0, 0, 1); //envia do processo 0 ao processo 1
+        Send(&mutexSaida0, &condEmptySaida0, &condFullSaida0, &filaSaidaCont0, filaSaida0, &clock0, 0, 1); //envia do processo 0 ao processo 1
         //printClock(&clock0, 0);
 
         Event(0, &clock0);
@@ -229,13 +224,13 @@ void* threadRelogio(void* arg) {
     }
     
     if (p == 1) {
-        insereFilaSaida(&mutexSaida1, &condEmptySaida1, &condFullSaida1, &filaSaidaCont1, filaSaida1, &clock1, 1, 0); //envia do processo 1 ao processo 0
+        Send(&mutexSaida1, &condEmptySaida1, &condFullSaida1, &filaSaidaCont1, filaSaida1, &clock1, 1, 0); //envia do processo 1 ao processo 0
         //printClock(&clock1, 1);
 
-        retiraFilaEntrada(&mutexEntrada1, &condEmptyEntrada1, &condFullEntrada1, &filaEntradaCont1, filaEntrada1, &clock1, 1); //recebe
+        Receive(&mutexEntrada1, &condEmptyEntrada1, &condFullEntrada1, &filaEntradaCont1, filaEntrada1, &clock1, 1); //recebe
         //printClock(&clock1, 1);
 
-        retiraFilaEntrada(&mutexEntrada1, &condEmptyEntrada1, &condFullEntrada1, &filaEntradaCont1, filaEntrada1, &clock1, 1); //recebe
+        Receive(&mutexEntrada1, &condEmptyEntrada1, &condFullEntrada1, &filaEntradaCont1, filaEntrada1, &clock1, 1); //recebe
         //printClock(&clock1, 1);
     }
 
@@ -243,10 +238,10 @@ void* threadRelogio(void* arg) {
         Event(2, &clock2);
         printClock(&clock2, 2);
 
-        insereFilaSaida(&mutexSaida2, &condEmptySaida2, &condFullSaida2, &filaSaidaCont2, filaSaida2, &clock2, 2, 0); //envia do processo 2 ao processo 0
+        Send(&mutexSaida2, &condEmptySaida2, &condFullSaida2, &filaSaidaCont2, filaSaida2, &clock2, 2, 0); //envia do processo 2 ao processo 0
         //printClock(&clock2, 2);
 
-        retiraFilaEntrada(&mutexEntrada2, &condEmptyEntrada2, &condFullEntrada2, &filaEntradaCont2, filaEntrada2, &clock2, 2); //recebe
+        Receive(&mutexEntrada2, &condEmptyEntrada2, &condFullEntrada2, &filaEntradaCont2, filaEntrada2, &clock2, 2); //recebe
         //printClock(&clock2, 2);
     }
     return NULL;
@@ -256,13 +251,13 @@ void* threadSaida(void* arg) {
     long p = (long) arg;
     while(1) {
         if (p == 0) {
-            retiraFilaSaida(&mutexSaida0, &condEmptySaida0, &condFullSaida0, &filaSaidaCont0, filaSaida0, &clock0);
+            saidaSend(&mutexSaida0, &condEmptySaida0, &condFullSaida0, &filaSaidaCont0, filaSaida0, &clock0);
         }
         if (p == 1) {
-            retiraFilaSaida(&mutexSaida1, &condEmptySaida1, &condFullSaida1, &filaSaidaCont1, filaSaida1, &clock1);
+            saidaSend(&mutexSaida1, &condEmptySaida1, &condFullSaida1, &filaSaidaCont1, filaSaida1, &clock1);
         }
         if (p == 2) {
-            retiraFilaSaida(&mutexSaida2, &condEmptySaida2, &condFullSaida2, &filaSaidaCont2, filaSaida2, &clock2);
+            saidaSend(&mutexSaida2, &condEmptySaida2, &condFullSaida2, &filaSaidaCont2, filaSaida2, &clock2);
         }
     }
     return NULL;
@@ -272,18 +267,17 @@ void* threadEntrada(void* arg) {
     long p = (long) arg;
     while(1) {
         if (p == 0) {
-            insereFilaEntrada(&mutexEntrada0, &condEmptyEntrada0, &condFullEntrada0, &filaEntradaCont0, filaEntrada0, &clock0);
+            entradaReceive(&mutexEntrada0, &condEmptyEntrada0, &condFullEntrada0, &filaEntradaCont0, filaEntrada0, &clock0);
         }
         if (p == 1) {
-            insereFilaEntrada(&mutexEntrada1, &condEmptyEntrada1, &condFullEntrada1, &filaEntradaCont1, filaEntrada1, &clock1);
+            entradaReceive(&mutexEntrada1, &condEmptyEntrada1, &condFullEntrada1, &filaEntradaCont1, filaEntrada1, &clock1);
         }
         if (p == 2) {
-            insereFilaEntrada(&mutexEntrada2, &condEmptyEntrada2, &condFullEntrada2, &filaEntradaCont2, filaEntrada2, &clock2);
+            entradaReceive(&mutexEntrada2, &condEmptyEntrada2, &condFullEntrada2, &filaEntradaCont2, filaEntrada2, &clock2);
         }
     }
     return NULL;
 }
-
 
 void processo(long p) {
     Clock clock = {{0,0,0}};
